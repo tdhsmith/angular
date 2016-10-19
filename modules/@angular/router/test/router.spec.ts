@@ -82,6 +82,37 @@ describe('Router', () => {
         expect(s2.root.firstChild.firstChild.data).toEqual({data: 'resolver2_value'});
       });
     });
+
+    it('should add checks in the correct order during traversal', () => {
+      let guardOrder : number[] = [];
+      const guardInjector = {
+        get: (token: any) => {
+          if (typeof token === "number") {
+            return () => {
+              guardOrder.push(token);
+              return `${token}_value`;
+            }
+          }
+          return () => `${token}_value`;
+        }
+      }
+
+      const nodeConfig = {canDeactivate: [2], canActivate: [3]};
+      const n1a = createActivatedRouteSnapshot('a', {}, nodeConfig, {param: 'a'});
+      const n1b = createActivatedRouteSnapshot('b', {}, nodeConfig, {param: 'b'});
+      const n2 = createActivatedRouteSnapshot('a', {}, {canDeactivate: [1], canActivate: [-1]});
+      const n3 = createActivatedRouteSnapshot('b', {}, {canDeactivate: [-1], canActivate: [4]});
+
+      const s1 = new RouterStateSnapshot('a/a', new TreeNode(empty.root, [new TreeNode(n1a, [new TreeNode(n2, [])])]));
+      const s2 = new RouterStateSnapshot('b/b', new TreeNode(empty.root, [new TreeNode(n1b, [new TreeNode(n3, [])])]));
+      const p = new PreActivation(s2, s1, guardInjector);
+
+      p.traverse(new RouterOutletMap());
+      p.checkGuards();
+
+      expect(guardOrder).not.toContain(-1);
+      expect(guardOrder).toEqual([1,2,3,4]);
+    })
   });
 });
 
@@ -92,8 +123,8 @@ function checkResolveData(
   p.resolveData().subscribe(check, (e) => { throw e; });
 }
 
-function createActivatedRouteSnapshot(cmp: string, extra: any = {}): ActivatedRouteSnapshot {
+function createActivatedRouteSnapshot(cmp: string, extra: any = {}, config: any = null, params: any = {}): ActivatedRouteSnapshot {
   return new ActivatedRouteSnapshot(
-      <any>null, {}, <any>null, <any>null, <any>null, <any>null, <any>cmp, <any>null, <any>null, -1,
+      <any>null, params, <any>null, <any>null, <any>null, <any>null, <any>cmp, <any>config, <any>null, -1,
       extra.resolve);
 }
